@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="description" content="[text ]">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width">
+  <title>JS Bin</title>
+<style id="jsbin-css">
+.tile{
+  border: 1px solid black;
+  width:30px;
+  display:inline-block;
+  height: 30px;
+  vertical-align: top;
+  text-align: center;
+  line-height: 30px;
+}
+
+#app{
+  padding: 10px
+}
+
+.grid-row{
+  margin: 0px;
+  padding: 0px;
+  height: 30px;
+}
+</style>
+</head>
+<body>
+  <div id="app"></div>
+<script id="jsbin-javascript">
+class Tile extends EventTarget{
+  constructor(m, n, tileClickCb){
+    super();
+    this.isHidden = true;
+    this.m = m;
+    this.n = n;
+    this.tileClickCb = tileClickCb;
+    this.mineCount=0;
+  }
+  isMine(){
+    return false;
+  }
+  updateMineCount(count){
+    this.mineCount = count;
+  }
+  show(){
+    this.isHidden = false;
+    this.dispatchEvent(new CustomEvent('render'))
+  }
+  elements(){
+    this.domNode = document.createElement('span');
+    this.domNode.addEventListener('click', ()=>{
+      this.tileClickCb(this.m, this.n)
+    })
+    this.domNode.innerText = this.isHidden? " ": this.mineCount;
+    this.domNode.className= "tile";
+    this.domNode.addEventListener('click', (e)=> {
+      this.tileClickCb(this.m, this.n)
+    });
+    return this.domNode;
+  }
+}
+
+
+class Mine  extends EventTarget{
+  constructor(m, n, tileClickCb){
+    super();
+    this.isHidden = true;
+    this.m = m;
+    this.n = n;
+    this.tileClickCb = tileClickCb;
+  }
+  isMine(){
+    return true;
+  }
+  show(){
+    this.isHidden = false;
+    this.dispatchEvent(new CustomEvent('render'))
+  }
+  elements(){
+    this.domNode = document.createElement('span');
+    this.domNode.innerText= this.isHidden? " ": "*";
+    this.domNode.className= "tile";
+    this.domNode.addEventListener('click', (e)=> {
+      this.tileClickCb(this.m, this.n)
+    });
+    return this.domNode;
+  }
+}
+
+
+class Grid extends EventTarget{
+  constructor(m, n, gameOver){
+    super();
+    this.m = m;
+    this.n = n;
+    this.arr = [];
+    this.gameOver = gameOver;
+    for(var i=0;i<m;i++){
+      var temp = [];
+      for(var j=0;j<n;j++){
+        temp.push(this.getTile(i,j, Math.random()<0.3))
+      }
+      this.arr.push(temp);
+    }
+    this.updateTiles();
+  }
+  
+  getTile(i, j, isMine){
+    var tile = isMine 
+    ? new Mine(i, j,  this.tileClickCb.bind(this))
+    : new Tile(i,j, this.tileClickCb.bind(this));
+    tile.addEventListener('render', ()=>{
+      this.dispatchEvent(new CustomEvent('render'));
+    })
+    return tile;
+  }
+  
+  getMineCount(i, j){
+    //logic to counnt mine;
+    var count=0, {m, n} = this;
+    if(i-1>=0 && j-1>=0)
+      if(this.arr[i-1][j-1].isMine())count++;
+    if(i-1>=0)
+      if(this.arr[i-1][j].isMine())count++;
+    if(j-1>=0)
+      if(this.arr[i][j-1].isMine())count++;
+    if(j-1>=0 && i+1<m)
+      if(this.arr[i+1][j-1].isMine())count++;
+    if(i+1<m)
+      if(this.arr[i+1][j].isMine())count++;
+    if(i+1<m && j+1<n)
+      if(this.arr[i+1][j+1].isMine())count++;
+    if(j+1<n)
+      if(this.arr[i][j+1].isMine())count++;
+    if(i-1>=0 && j+1<n)
+      if(this.arr[i-1][j+1].isMine())count++;
+    return count;
+  }
+  updateTiles(){
+    //updates tiles with proper nuke info
+    for(var i=0;i<this.arr.length;i++){
+      for(var j=0;j<this.arr[i].length;j++){
+        if(!this.arr[i][j].isMine())
+          this.arr[i][j].updateMineCount(this.getMineCount(i,j));
+      }
+    }
+  }
+  tileClickCb(i, j){
+    if(this.arr[i][j].isMine()){
+      this.dispatchEvent(new CustomEvent('gameover'));
+    }else{
+      this.arr[i][j].show();
+    }
+  }
+  
+  showAll(){
+    this.arr.forEach((row)=>{
+      row.forEach((tile)=>{
+        tile.isHidden = false;
+      })
+    })
+  }
+  
+  elements(){
+     this.domNode = document.createElement('div');
+     this.arr.map((row)=> {
+       var rowDOM = document.createElement('div');
+       
+       row.forEach((tile)=>{
+         rowDOM.appendChild(tile.elements());
+       })
+       rowDOM.className="grid-row"
+       this.domNode.appendChild(rowDOM);
+     })
+     return this.domNode;
+  }
+}
+class MineSweeper extends EventTarget{
+  constructor(){
+    super();
+  }
+  start(m, n){
+    this.grid = new Grid(m, n, this.gameOver);
+    this.grid.addEventListener('render', ()=>{
+      this.dispatchEvent(new CustomEvent('render'))
+    })
+    this.grid.addEventListener('gameover', ()=>{
+      this.dispatchEvent(new CustomEvent('gameover'))
+    })
+  }
+  gameOver(){
+    this.grid.showAll();
+  }
+  
+  elements(){
+    return this.grid.elements();
+  }
+}
+
+class Main{
+  static initialize(){
+    var app = document.getElementById('app');
+    var game = new MineSweeper();
+    game.start(10, 10);
+    app.innerHTML="";
+    app.appendChild(game.elements());
+    game.addEventListener('render', ()=>{
+      app.innerHTML="";
+      app.appendChild(game.elements());
+    })
+    game.addEventListener('gameover', ()=>{
+      var gameoverDOM = document.createElement('div')
+      var restartBtnDOM = document.createElement('Button');
+      restartBtnDOM.addEventListener('click', Main.initialize);
+      restartBtnDOM.innerText="Restart"
+      gameoverDOM.innerHTML = "GAME OVER"
+      app.innerHTML = "";
+      game.gameOver();
+      app.appendChild(game.elements());
+      app.appendChild(gameoverDOM);
+      app.appendChild(restartBtnDOM);
+    })
+  }
+}
+
+
+
+Main.initialize();
+</script>
+
+
+<script id="jsbin-source-css" type="text/css">
+.tile{
+  border: 1px solid black;
+  width:30px;
+  display:inline-block;
+  height: 30px;
+  vertical-align: top;
+  text-align: center;
+  line-height: 30px;
+}
+
+#app{
+  padding: 10px
+}
+
+.grid-row{
+  margin: 0px;
+  padding: 0px;
+  height: 30px;
+}</script>
+
+<script id="jsbin-source-javascript" type="text/javascript">class Tile extends EventTarget{
+  constructor(m, n, tileClickCb){
+    super();
+    this.isHidden = true;
+    this.m = m;
+    this.n = n;
+    this.tileClickCb = tileClickCb;
+    this.mineCount=0;
+  }
+  isMine(){
+    return false;
+  }
+  updateMineCount(count){
+    this.mineCount = count;
+  }
+  show(){
+    this.isHidden = false;
+    this.dispatchEvent(new CustomEvent('render'))
+  }
+  elements(){
+    this.domNode = document.createElement('span');
+    this.domNode.addEventListener('click', ()=>{
+      this.tileClickCb(this.m, this.n)
+    })
+    this.domNode.innerText = this.isHidden? " ": this.mineCount;
+    this.domNode.className= "tile";
+    this.domNode.addEventListener('click', (e)=> {
+      this.tileClickCb(this.m, this.n)
+    });
+    return this.domNode;
+  }
+}
+
+
+class Mine  extends EventTarget{
+  constructor(m, n, tileClickCb){
+    super();
+    this.isHidden = true;
+    this.m = m;
+    this.n = n;
+    this.tileClickCb = tileClickCb;
+  }
+  isMine(){
+    return true;
+  }
+  show(){
+    this.isHidden = false;
+    this.dispatchEvent(new CustomEvent('render'))
+  }
+  elements(){
+    this.domNode = document.createElement('span');
+    this.domNode.innerText= this.isHidden? " ": "*";
+    this.domNode.className= "tile";
+    this.domNode.addEventListener('click', (e)=> {
+      this.tileClickCb(this.m, this.n)
+    });
+    return this.domNode;
+  }
+}
+
+
+class Grid extends EventTarget{
+  constructor(m, n, gameOver){
+    super();
+    this.m = m;
+    this.n = n;
+    this.arr = [];
+    this.gameOver = gameOver;
+    for(var i=0;i<m;i++){
+      var temp = [];
+      for(var j=0;j<n;j++){
+        temp.push(this.getTile(i,j, Math.random()<0.3))
+      }
+      this.arr.push(temp);
+    }
+    this.updateTiles();
+  }
+  
+  getTile(i, j, isMine){
+    var tile = isMine 
+    ? new Mine(i, j,  this.tileClickCb.bind(this))
+    : new Tile(i,j, this.tileClickCb.bind(this));
+    tile.addEventListener('render', ()=>{
+      this.dispatchEvent(new CustomEvent('render'));
+    })
+    return tile;
+  }
+  
+  getMineCount(i, j){
+    //logic to counnt mine;
+    var count=0, {m, n} = this;
+    if(i-1>=0 && j-1>=0)
+      if(this.arr[i-1][j-1].isMine())count++;
+    if(i-1>=0)
+      if(this.arr[i-1][j].isMine())count++;
+    if(j-1>=0)
+      if(this.arr[i][j-1].isMine())count++;
+    if(j-1>=0 && i+1<m)
+      if(this.arr[i+1][j-1].isMine())count++;
+    if(i+1<m)
+      if(this.arr[i+1][j].isMine())count++;
+    if(i+1<m && j+1<n)
+      if(this.arr[i+1][j+1].isMine())count++;
+    if(j+1<n)
+      if(this.arr[i][j+1].isMine())count++;
+    if(i-1>=0 && j+1<n)
+      if(this.arr[i-1][j+1].isMine())count++;
+    return count;
+  }
+  updateTiles(){
+    //updates tiles with proper nuke info
+    for(var i=0;i<this.arr.length;i++){
+      for(var j=0;j<this.arr[i].length;j++){
+        if(!this.arr[i][j].isMine())
+          this.arr[i][j].updateMineCount(this.getMineCount(i,j));
+      }
+    }
+  }
+  tileClickCb(i, j){
+    if(this.arr[i][j].isMine()){
+      this.dispatchEvent(new CustomEvent('gameover'));
+    }else{
+      this.arr[i][j].show();
+    }
+  }
+  
+  showAll(){
+    this.arr.forEach((row)=>{
+      row.forEach((tile)=>{
+        tile.isHidden = false;
+      })
+    })
+  }
+  
+  elements(){
+     this.domNode = document.createElement('div');
+     this.arr.map((row)=> {
+       var rowDOM = document.createElement('div');
+       
+       row.forEach((tile)=>{
+         rowDOM.appendChild(tile.elements());
+       })
+       rowDOM.className="grid-row"
+       this.domNode.appendChild(rowDOM);
+     })
+     return this.domNode;
+  }
+}
+class MineSweeper extends EventTarget{
+  constructor(){
+    super();
+  }
+  start(m, n){
+    this.grid = new Grid(m, n, this.gameOver);
+    this.grid.addEventListener('render', ()=>{
+      this.dispatchEvent(new CustomEvent('render'))
+    })
+    this.grid.addEventListener('gameover', ()=>{
+      this.dispatchEvent(new CustomEvent('gameover'))
+    })
+  }
+  gameOver(){
+    this.grid.showAll();
+  }
+  
+  elements(){
+    return this.grid.elements();
+  }
+}
+
+class Main{
+  static initialize(){
+    var app = document.getElementById('app');
+    var game = new MineSweeper();
+    game.start(10, 10);
+    app.innerHTML="";
+    app.appendChild(game.elements());
+    game.addEventListener('render', ()=>{
+      app.innerHTML="";
+      app.appendChild(game.elements());
+    })
+    game.addEventListener('gameover', ()=>{
+      var gameoverDOM = document.createElement('div')
+      var restartBtnDOM = document.createElement('Button');
+      restartBtnDOM.addEventListener('click', Main.initialize);
+      restartBtnDOM.innerText="Restart"
+      gameoverDOM.innerHTML = "GAME OVER"
+      app.innerHTML = "";
+      game.gameOver();
+      app.appendChild(game.elements());
+      app.appendChild(gameoverDOM);
+      app.appendChild(restartBtnDOM);
+    })
+  }
+}
+
+
+
+Main.initialize();
+</script></body>
+</html>
